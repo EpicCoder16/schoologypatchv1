@@ -1,39 +1,30 @@
 /**
  * patchEngine.js
- * Core DOM engine — runs inside Schoology via bookmarklet injection.
+ * Core DOM engine — injected into Schoology via bookmarklet.
  *
- * Rule types supported:
- *   hide        — display:none matching elements
- *   css         — append inline styles to matching elements
- *   addClass    — add a CSS class
- *   removeClass — remove a CSS class
- *   highlight   — apply a colored left-border + background tint
- *   move        — relocate element(s) to a new parent in the DOM
- *   inject      — insert an HTML string at/into a target element
- *   agenda      — special: scrape feed + todo, render a smart agenda tab
+ * Rule types: hide, css, addClass, removeClass, highlight, move, inject, agenda
  */
 
-/* ── Utility ─────────────────────────────────────────────────────────────── */
-
-function _query(selector) {
-  if (!selector) return [];
-  try { return Array.prototype.slice.call(document.querySelectorAll(selector)); }
+function _query(sel) {
+  if (!sel) return [];
+  try { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
   catch(e) { return []; }
 }
-
-function _one(selector) {
-  if (!selector) return null;
-  try { return document.querySelector(selector); }
+function _one(sel) {
+  if (!sel) return null;
+  try { return document.querySelector(sel); }
   catch(e) { return null; }
+}
+function _esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 /* ── RuleEngine ──────────────────────────────────────────────────────────── */
 
 var RuleEngine = {
-
   apply: function(rule) {
     try {
-      switch (rule.type) {
+      switch(rule.type) {
         case 'hide':        return this._hide(rule);
         case 'css':         return this._css(rule);
         case 'addClass':    return this._addClass(rule);
@@ -41,403 +32,443 @@ var RuleEngine = {
         case 'highlight':   return this._highlight(rule);
         case 'move':        return this._move(rule);
         case 'inject':      return this._inject(rule);
-        case 'agenda':      return AgendaPanel.init(rule);
+        case 'agenda':      return AgendaPanel.init();
         default: return false;
       }
-    } catch(e) { return false; }
+    } catch(e) { console.warn('[Patch] Rule error:', rule.type, e); return false; }
   },
 
-  _hide: function(rule) {
-    var els = _query(rule.selector);
-    els.forEach(function(el) { el.style.display = 'none'; });
+  _hide: function(r) {
+    var els = _query(r.selector);
+    els.forEach(function(el){ el.style.display='none'; });
     return els.length > 0;
   },
 
-  _css: function(rule) {
-    if (!rule.styles) return false;
-    var els = _query(rule.selector);
-    els.forEach(function(el) { el.style.cssText += rule.styles; });
-    return els.length > 0;
+  _css: function(r) {
+    if (!r.styles) return false;
+    _query(r.selector).forEach(function(el){ el.style.cssText += r.styles; });
+    return true;
   },
 
-  _addClass: function(rule) {
-    if (!rule.className) return false;
-    var els = _query(rule.selector);
-    els.forEach(function(el) { el.classList.add(rule.className); });
-    return els.length > 0;
+  _addClass: function(r) {
+    if (!r.className) return false;
+    _query(r.selector).forEach(function(el){ el.classList.add(r.className); });
+    return true;
   },
 
-  _removeClass: function(rule) {
-    if (!rule.className) return false;
-    var els = _query(rule.selector);
-    els.forEach(function(el) { el.classList.remove(rule.className); });
-    return els.length > 0;
+  _removeClass: function(r) {
+    if (!r.className) return false;
+    _query(r.selector).forEach(function(el){ el.classList.remove(r.className); });
+    return true;
   },
 
-  /**
-   * highlight — draws a colored accent on matching elements.
-   * rule.color  : CSS color string (default: #f5a623)
-   * rule.bgAlpha: 0–1 background opacity (default: 0.07)
-   */
-  _highlight: function(rule) {
-    var color = rule.color || '#f5a623';
-    var els = _query(rule.selector);
-    els.forEach(function(el) {
-      el.style.borderLeft = '3px solid ' + color;
-      el.style.paddingLeft = '8px';
-      el.style.background = rule.bg || 'rgba(245,166,35,0.07)';
+  _highlight: function(r) {
+    var color = r.color || '#f5a623';
+    var bg    = r.bg    || 'rgba(245,166,35,0.07)';
+    _query(r.selector).forEach(function(el){
+      el.style.borderLeft   = '3px solid ' + color;
+      el.style.paddingLeft  = '8px';
+      el.style.background   = bg;
       el.style.borderRadius = '3px';
     });
-    return els.length > 0;
+    return true;
   },
 
-  /**
-   * move — physically relocates matched elements into a target parent.
-   * rule.selector : elements to move
-   * rule.target   : destination parent selector
-   * rule.position : 'append' (default) | 'prepend'
-   */
-  _move: function(rule) {
-    if (!rule.target) return false;
-    var dest = _one(rule.target);
+  _move: function(r) {
+    if (!r.target) return false;
+    var dest = _one(r.target);
     if (!dest) return false;
-    var els = _query(rule.selector);
-    els.forEach(function(el) {
-      if (rule.position === 'prepend') dest.insertBefore(el, dest.firstChild);
+    _query(r.selector).forEach(function(el){
+      if (r.position === 'prepend') dest.insertBefore(el, dest.firstChild);
       else dest.appendChild(el);
     });
-    return els.length > 0;
+    return true;
   },
 
-  /**
-   * inject — insert HTML relative to a target element.
-   * rule.target   : destination selector
-   * rule.html     : HTML string to insert
-   * rule.position : 'beforebegin'|'afterbegin'|'beforeend'(default)|'afterend'
-   *                 OR 'replace' to swap innerHTML
-   * rule.once     : if true, skip if data-spm-injected already set on target
-   */
-  _inject: function(rule) {
-    if (!rule.html || !rule.target) return false;
-    var target = _one(rule.target);
-    if (!target) return false;
-    if (rule.once && target.dataset.spmInjected) return true; // already done
-    var pos = rule.position || 'beforeend';
-    if (pos === 'replace') {
-      target.innerHTML = rule.html;
-    } else {
-      target.insertAdjacentHTML(pos, rule.html);
-    }
-    if (rule.once) target.dataset.spmInjected = '1';
+  _inject: function(r) {
+    if (!r.html || !r.target) return false;
+    var t = _one(r.target);
+    if (!t) return false;
+    if (r.once && t.dataset.spmDone) return true;
+    if (r.position === 'replace') t.innerHTML = r.html;
+    else t.insertAdjacentHTML(r.position || 'beforeend', r.html);
+    if (r.once) t.dataset.spmDone = '1';
     return true;
   }
 };
 
 /* ── AgendaPanel ─────────────────────────────────────────────────────────── */
-/**
- * Scrapes the live Schoology DOM for:
- *   1. Upcoming assignments from #right-column (.upcoming-item or similar)
- *   2. Event-like text from feed posts (.update-body.s-rte)
- * Then injects a new "AGENDA" tab next to "Recent Activity" and renders
- * a unified, sorted agenda view inside a new panel.
+/*
+ * Confirmed DOM structure from DevTools inspection:
+ *
+ * OVERDUE section:
+ *   #right-column .upcoming-list
+ *     div#overdue_submissions.date-header          ← date group header
+ *     div.upcoming-event.upcoming-event-block      ← one assignment
+ *       h4 > span.infotip[aria-label="COURSE : section School"]
+ *         span.event-title > a.sExtlink-processed  ← TITLE LINK ✓
+ *         span.event-title > span                  ← days overdue badge
+ *
+ * UPCOMING section (after h4.submissions-title "UPCOMING"):
+ *   div#upcoming_submissions.date-header           ← date group header
+ *   div.upcoming-event.upcoming-event-block        ← one assignment
+ *     (same structure as overdue)
+ *
+ * Feed events:
+ *   li[id^="edge-assoc-"] .update-body.s-rte       ← post body text
+ *   li[id^="edge-assoc-"] .long-username           ← poster name
  */
 
 var AgendaPanel = {
-
   _built: false,
 
-  init: function(rule) {
-    if (this._built) {
-      // On MutationObserver re-runs, just refresh data
-      this._refreshData();
-      return true;
-    }
+  init: function() {
+    if (this._built) { this._refreshData(); return true; }
     this._built = true;
     this._injectStyles();
-    this._buildTab();
-    this._buildPanel();
-    this._refreshData();
+    this._buildUI();
+    var self = this;
+    // Wait 500ms for Schoology's JS to finish rendering the sidebar
+    setTimeout(function(){ self._refreshData(); }, 500);
     return true;
   },
 
-  /* ── Inject scoped CSS so the panel looks good inside Schoology ── */
   _injectStyles: function() {
-    if (document.getElementById('spm-agenda-styles')) return;
-    var style = document.createElement('style');
-    style.id = 'spm-agenda-styles';
-    style.textContent = [
-      '#spm-agenda-tab {',
-      '  display:inline-block; padding:10px 16px; cursor:pointer;',
-      '  font-size:13px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;',
-      '  color:#666; border-bottom:2px solid transparent; transition:color .15s,border-color .15s;',
-      '  user-select:none;',
-      '}',
-      '#spm-agenda-tab.spm-active { color:#1c458e; border-bottom-color:#1c458e; }',
-      '#spm-agenda-tab:hover { color:#1c458e; }',
-      '#spm-agenda-panel {',
-      '  display:none; padding:16px 0; animation: spmFadeIn .2s ease;',
-      '}',
-      '#spm-agenda-panel.spm-visible { display:block; }',
-      '@keyframes spmFadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }',
-      '.spm-section-head {',
-      '  font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;',
-      '  color:#999; padding:4px 0 8px; border-bottom:1px solid #e8e8e8; margin-bottom:10px;',
-      '}',
-      '.spm-item {',
-      '  display:flex; align-items:flex-start; gap:12px;',
-      '  padding:10px 12px; margin-bottom:6px; border-radius:6px;',
-      '  background:#f8f9fc; border-left:3px solid #ccc; transition:background .15s;',
-      '}',
-      '.spm-item:hover { background:#f0f3fb; }',
-      '.spm-item.spm-overdue { border-left-color:#e53935; background:#fff8f8; }',
-      '.spm-item.spm-upcoming { border-left-color:#1c458e; background:#f5f8ff; }',
-      '.spm-item.spm-event { border-left-color:#f5a623; background:#fffbf2; }',
-      '.spm-dot {',
-      '  width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:5px;',
-      '}',
-      '.spm-item.spm-overdue .spm-dot { background:#e53935; }',
-      '.spm-item.spm-upcoming .spm-dot { background:#1c458e; }',
-      '.spm-item.spm-event .spm-dot { background:#f5a623; }',
-      '.spm-title { font-size:13px; font-weight:600; color:#222; line-height:1.4; }',
-      '.spm-meta { font-size:11px; color:#888; margin-top:2px; }',
-      '.spm-empty { font-size:13px; color:#aaa; text-align:center; padding:32px 0; }',
-      '.spm-count {',
-      '  display:inline-block; font-size:10px; font-weight:700;',
-      '  background:#1c458e; color:#fff; border-radius:10px;',
-      '  padding:1px 6px; margin-left:6px; vertical-align:middle;',
-      '}',
-    ].join('\n');
-    document.head.appendChild(style);
+    if (document.getElementById('spm-styles')) return;
+    var s = document.createElement('style');
+    s.id = 'spm-styles';
+    s.textContent = [
+      /* Tab button — sits inline in Schoology's own tab strip */
+      '#spm-tab{display:inline-flex;align-items:center;padding:10px 16px;',
+      'font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;',
+      'color:#888;border-bottom:3px solid transparent;cursor:pointer;user-select:none;',
+      'vertical-align:bottom;transition:color .15s,border-color .15s;}',
+      '#spm-tab:hover{color:#1c458e;}',
+      '#spm-tab.on{color:#1c458e;border-bottom-color:#1c458e;}',
+
+      /* Panel */
+      '#spm-panel{display:none;padding:18px 0;animation:spmIn .2s ease;}',
+      '#spm-panel.on{display:block;}',
+      '@keyframes spmIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}',
+
+      /* Section headers */
+      '.spm-h{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;',
+      'color:#999;padding:0 0 7px;border-bottom:1px solid #e5e5e5;margin:0 0 10px;}',
+      '.spm-h+.spm-h,.spm-spacer{margin-top:22px;}',
+
+      /* Item rows */
+      '.spm-row{display:flex;align-items:flex-start;gap:10px;',
+      'padding:10px 12px;margin-bottom:6px;border-radius:6px;',
+      'border-left:3px solid #ddd;background:#f8f8f8;}',
+      '.spm-row.ov{border-left-color:#e53935;background:#fff8f8;}',
+      '.spm-row.up{border-left-color:#1c458e;background:#f5f8ff;}',
+      '.spm-row.ev{border-left-color:#f5a623;background:#fffbf2;}',
+
+      /* Dot */
+      '.spm-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px;}',
+      '.spm-row.ov .spm-dot{background:#e53935;}',
+      '.spm-row.up .spm-dot{background:#1c458e;}',
+      '.spm-row.ev .spm-dot{background:#f5a623;}',
+
+      /* Text */
+      '.spm-title{font-size:13px;font-weight:600;color:#222;line-height:1.4;}',
+      '.spm-title a{color:inherit;text-decoration:none;}',
+      '.spm-title a:hover{text-decoration:underline;}',
+      '.spm-meta{font-size:11px;color:#888;margin-top:2px;line-height:1.4;}',
+
+      /* Badge */
+      '.spm-badge{display:inline-block;font-size:9px;font-weight:700;',
+      'background:#1c458e;color:#fff;border-radius:8px;padding:1px 5px;margin-left:5px;vertical-align:middle;}',
+
+      /* Empty state */
+      '.spm-empty{font-size:13px;color:#aaa;text-align:center;padding:40px 0;}',
+    ].join('');
+    document.head.appendChild(s);
   },
 
-  /* ── Add an "AGENDA" tab next to the existing tabs ─────────────── */
-  _buildTab: function() {
-    // Tab strip: confirmed selector from inspector
-    // Schoology uses <ul class="s-tabbed-navigation-tabs"> or a generic tab list
-    // We insert after whatever tab list we can find
-    var tabStrip = _one('.s-tabbed-navigation-tabs, .tabs-bar, [role="tablist"], .center-top-tabs');
+  _buildUI: function() {
+    if (document.getElementById('spm-tab')) return;
 
-    var tab = document.createElement('span');
-    tab.id = 'spm-agenda-tab';
-    tab.textContent = 'Agenda';
-
+    /* -- Tab button -- */
+    var btn = document.createElement('span');
+    btn.id = 'spm-tab';
+    btn.textContent = 'Agenda';
     var self = this;
+    btn.addEventListener('click', function(){ self._toggle(); });
 
-    tab.addEventListener('click', function() {
-      self._showAgenda();
-    });
+    /*
+     * Find Schoology's tab strip.
+     * The "Recent Activity / Course Dashboard" tabs live inside
+     * .s-tabbed-navigation which is inside #center-top.
+     * We try progressively broader selectors.
+     */
+    var strip = _one('.s-tabbed-navigation')
+             || _one('#center-top ul')
+             || _one('#center-top');
 
-    if (tabStrip) {
-      tabStrip.appendChild(tab);
+    if (strip) {
+      strip.appendChild(btn);
     } else {
-      // Fallback: insert before the feed
-      var feed = _one('.feed, #main-inner');
-      if (feed) feed.parentNode.insertBefore(tab, feed);
+      // Absolute fallback: float above the feed
+      var anchor = _one('#content-wrapper') || _one('#main-inner');
+      if (anchor) anchor.insertAdjacentElement('afterbegin', btn);
     }
-  },
 
-  /* ── Build the hidden panel that will hold agenda content ───────── */
-  _buildPanel: function() {
+    /* -- Panel -- */
     var panel = document.createElement('div');
-    panel.id = 'spm-agenda-panel';
+    panel.id = 'spm-panel';
 
-    // Insert panel after the feed container so it takes the same space
-    var feed = _one('.feed, #main-inner, #center');
-    if (feed) {
-      feed.parentNode.insertBefore(panel, feed.nextSibling);
+    // Insert panel as sibling after the feed div
+    var feedDiv = _one('.feed') || _one('#main-inner');
+    if (feedDiv) {
+      feedDiv.parentNode.insertBefore(panel, feedDiv.nextSibling);
     } else {
-      // Last resort: append to content wrapper
-      var cw = _one('#content-wrapper, #center-wrapper');
+      var cw = _one('#content-wrapper') || _one('#center-wrapper');
       if (cw) cw.appendChild(panel);
     }
   },
 
-  /* ── Show the agenda panel, hide the normal feed ────────────────── */
-  _showAgenda: function() {
-    // Deactivate other tabs visually
-    var existingActive = _one('.spm-active');
-    if (existingActive) existingActive.classList.remove('spm-active');
+  _toggle: function() {
+    var btn    = document.getElementById('spm-tab');
+    var panel  = document.getElementById('spm-panel');
+    var feed   = _one('.feed');
+    var isOn   = panel && panel.classList.contains('on');
 
-    var tab = document.getElementById('spm-agenda-tab');
-    if (tab) tab.classList.add('spm-active');
-
-    // Hide feed, show agenda
-    var feed = _one('.feed, #main-inner');
-    var tabs = _one('.s-tabbed-navigation-tabs, .tabs-bar');
-    var panel = document.getElementById('spm-agenda-panel');
-
-    if (feed) feed.style.display = 'none';
-    if (panel) panel.classList.add('spm-visible');
-
-    this._refreshData();
+    if (isOn) {
+      panel.classList.remove('on');
+      btn.classList.remove('on');
+      if (feed) feed.style.display = '';
+    } else {
+      panel.classList.add('on');
+      btn.classList.add('on');
+      if (feed) feed.style.display = 'none';
+      this._refreshData();
+    }
   },
 
-  /* ── Scrape DOM and re-render agenda content ────────────────────── */
   _refreshData: function() {
-    var panel = document.getElementById('spm-agenda-panel');
-    if (!panel || !panel.classList.contains('spm-visible')) return;
-
-    var assignments = this._scrapeAssignments();
-    var events      = this._scrapeEvents();
-
-    this._render(panel, assignments, events);
+    var panel = document.getElementById('spm-panel');
+    if (!panel || !panel.classList.contains('on')) return;
+    var overdue  = this._scrapeOverdue();
+    var upcoming = this._scrapeUpcoming();
+    var events   = this._scrapeEvents();
+    this._render(panel, overdue, upcoming, events);
   },
 
-  /**
-   * Scrape the To Do sidebar (#right-column) for assignments.
-   * Returns array of { title, meta, type:'overdue'|'upcoming' }
+  /* ── SCRAPE OVERDUE ─────────────────────────────────────────────
+   * Confirmed: overdue items are div.upcoming-event.upcoming-event-block
+   * that appear BEFORE the h4.submissions-title "UPCOMING" header.
+   * The assignment link is at: span.event-title > a
+   * The course is in the aria-label of the parent span.infotip:
+   *   aria-label="COURSE : section School"
+   * Days overdue text is in the sibling span inside span.event-title.
    */
-  _scrapeAssignments: function() {
+  _scrapeOverdue: function() {
     var items = [];
+    var seen  = {};
 
-    // Overdue items
-    _query('#right-column .overdue-header ~ * a, #right-column [class*="overdue"] a').forEach(function(a) {
-      var text = a.textContent.trim();
-      if (!text || text.length < 3) return;
-      var metaEl = a.closest('li, .todo-item, [class*="item"]');
-      var meta = metaEl ? metaEl.textContent.replace(text, '').replace(/\s+/g,' ').trim() : '';
-      items.push({ title: text, meta: meta, type: 'overdue' });
-    });
-
-    // Upcoming items — Schoology renders these as links inside the right column
-    // Walk all links in right-column that aren't already captured as overdue
-    var seen = {};
-    items.forEach(function(i) { seen[i.title] = true; });
-
-    _query('#right-column a[href]').forEach(function(a) {
-      var text = a.textContent.trim();
-      if (!text || text.length < 3 || seen[text]) return;
-      if (/more overdue|show all/i.test(text)) return;
-      var metaEl = a.closest('li, .upcoming-item, [class*="item"], div');
-      var rawMeta = metaEl ? metaEl.textContent.replace(text,'').replace(/\s+/g,' ').trim() : '';
-      // Only include if meta looks like a date (contains month name or "Due")
-      if (/due|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2}\/\d{1,2}/i.test(rawMeta)) {
-        items.push({ title: text, meta: rawMeta, type: 'upcoming' });
-        seen[text] = true;
+    // Find where UPCOMING starts so we don't bleed into it
+    var upcomingHeader = _one('h4.submissions-title');
+    
+    _query('.upcoming-list .upcoming-event').forEach(function(block) {
+      // Skip if this block comes after the UPCOMING header
+      if (upcomingHeader && upcomingHeader.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        // block is AFTER upcomingHeader — skip (it's upcoming, not overdue)
+        // Note: compareDocumentPosition returns FOLLOWING if block follows header
+        // We want to skip blocks that appear AFTER the header
+        return;
       }
+      // Actually flip the logic: upcomingHeader PRECEDES block means block is upcoming
+      if (upcomingHeader &&
+          (upcomingHeader.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_PRECEDING) === 0 &&
+          upcomingHeader !== block) {
+        // header does NOT precede block, meaning block is before header = overdue ✓
+      }
+
+      var link = block.querySelector('span.event-title > a');
+      if (!link) return;
+      var title = link.textContent.trim();
+      if (!title || seen[title]) return;
+      seen[title] = true;
+
+      // Course from aria-label: "COURSE : section School"
+      var tooltip = block.querySelector('span.infotip[aria-label]');
+      var course  = '';
+      if (tooltip) {
+        var lbl = tooltip.getAttribute('aria-label') || '';
+        course  = lbl.split(':')[0].trim();
+      }
+
+      // Days overdue — the span sibling next to the <a> inside event-title
+      var eventTitleSpan = block.querySelector('span.event-title');
+      var daysSpan = eventTitleSpan ? eventTitleSpan.querySelector('span') : null;
+      var days = daysSpan ? daysSpan.textContent.trim() : '';
+
+      var meta = [course, days].filter(Boolean).join(' · ');
+      items.push({ title: title, href: link.getAttribute('href'), meta: meta, cls: 'ov' });
     });
 
     return items;
   },
 
-  /**
-   * Scrape the activity feed for event-like posts.
-   * Looks for posts containing dates, times, or event keywords.
-   * Returns array of { title, meta, type:'event', source }
+  /* ── SCRAPE UPCOMING ────────────────────────────────────────────
+   * Same div.upcoming-event structure but they appear after
+   * h4.submissions-title "UPCOMING".
+   * date-header divs have id="upcoming_submissions" between groups.
+   */
+  _scrapeUpcoming: function() {
+    var items = [];
+    var seen  = {};
+
+    var upcomingHeader = _one('h4.submissions-title');
+    if (!upcomingHeader) return items;
+
+    // Get the upcoming-list that contains the header
+    var upcomingList = upcomingHeader.closest('.upcoming-list')
+                    || upcomingHeader.parentNode;
+
+    // Walk all upcoming-event blocks inside the upcoming section
+    // Since overdue and upcoming share the same .upcoming-list, we need
+    // to only grab blocks that appear AFTER the h4
+    var allBlocks = _query('.upcoming-list .upcoming-event');
+    var passedHeader = false;
+
+    allBlocks.forEach(function(block) {
+      if (!passedHeader) {
+        // Check if we've passed the UPCOMING header in DOM order
+        // by seeing if the header precedes this block
+        if (upcomingHeader.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING) {
+          passedHeader = true;
+        } else {
+          return; // still before UPCOMING header
+        }
+      }
+
+      var link = block.querySelector('span.event-title > a');
+      if (!link) return;
+      var title = link.textContent.trim();
+      if (!title || seen[title]) return;
+      seen[title] = true;
+
+      var tooltip = block.querySelector('span.infotip[aria-label]');
+      var course  = '';
+      if (tooltip) {
+        var lbl = tooltip.getAttribute('aria-label') || '';
+        course  = lbl.split(':')[0].trim();
+      }
+
+      // Due date: look for a date-header preceding this block
+      // The date-header div with id="upcoming_submissions" holds the date text
+      // Walk backwards to find the most recent date header
+      var dateText = '';
+      var prev = block.previousElementSibling;
+      while (prev) {
+        if (prev.id === 'upcoming_submissions' || prev.classList.contains('date-header')) {
+          dateText = prev.textContent.trim();
+          break;
+        }
+        prev = prev.previousElementSibling;
+      }
+
+      var meta = [dateText, course].filter(Boolean).join(' · ');
+      items.push({ title: title, href: link.getAttribute('href'), meta: meta, cls: 'up' });
+    });
+
+    return items;
+  },
+
+  /* ── SCRAPE FEED EVENTS ─────────────────────────────────────────
+   * Walk feed posts, detect event-like keywords in body text.
    */
   _scrapeEvents: function() {
-    var events = [];
-    var eventPattern = /\b(\d{1,2}[\/\-]\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}:\d{2}\s*[ap]m|monday|tuesday|wednesday|thursday|friday|today|tomorrow|tonight|meeting|event|bingo|game|practice|concert|club|presentation|deadline|test|quiz|exam)\b/i;
+    var events  = [];
+    var pattern = /\b(\d{1,2}[\/\-]\d{1,2}|\d{1,2}:\d{2}\s*[ap]m|january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|meeting|event|bingo|game|practice|concert|club|deadline|test|quiz|exam|room\s*\d|auditorium|cafeteria|gym|library)\b/i;
 
     _query('li[id^="edge-assoc-"]').forEach(function(li) {
-      var bodyEl = li.querySelector('.update-body.s-rte, .update-sentence-inner');
+      var bodyEl = li.querySelector('.update-body.s-rte');
       if (!bodyEl) return;
-      var text = bodyEl.innerText || bodyEl.textContent || '';
-      text = text.replace(/\s+/g,' ').trim();
-      if (!text || text.length < 10) return;
-      if (!eventPattern.test(text)) return;
+      var text = (bodyEl.innerText || bodyEl.textContent || '').replace(/\s+/g,' ').trim();
+      if (!text || text.length < 10 || !pattern.test(text)) return;
 
-      // Get poster name from attribution line
-      var nameEl = li.querySelector('.long-username, .update-sentence-inner a');
-      var name = nameEl ? nameEl.textContent.trim() : 'Posted';
+      var nameEl = li.querySelector('.long-username, .edge-sentence a');
+      var name   = nameEl ? nameEl.textContent.trim() : 'Feed';
+      var title  = text.length > 140 ? text.substring(0,137)+'…' : text;
 
-      // Truncate long text
-      var title = text.length > 120 ? text.substring(0, 117) + '…' : text;
-
-      events.push({ title: title, meta: 'From: ' + name, type: 'event' });
+      events.push({ title: title, href: null, meta: 'From: '+name, cls: 'ev' });
     });
 
     return events;
   },
 
-  /* ── Render everything into the panel ──────────────────────────── */
-  _render: function(panel, assignments, events) {
-    var overdue  = assignments.filter(function(a) { return a.type === 'overdue'; });
-    var upcoming = assignments.filter(function(a) { return a.type === 'upcoming'; });
-
+  /* ── RENDER ─────────────────────────────────────────────────────── */
+  _render: function(panel, overdue, upcoming, events) {
     var html = '';
+    var gap  = false;
 
-    // ── Overdue ──
-    if (overdue.length > 0) {
-      html += '<div class="spm-section-head">Overdue <span class="spm-count">' + overdue.length + '</span></div>';
-      overdue.slice(0, 8).forEach(function(item) {
-        html += AgendaPanel._itemHTML(item);
-      });
-      if (overdue.length > 8) {
-        html += '<div class="spm-meta" style="text-align:center;padding:4px 0;">+ ' + (overdue.length - 8) + ' more — see To Do panel</div>';
-      }
+    if (overdue.length) {
+      html += '<div class="spm-h">Overdue <span class="spm-badge">'+overdue.length+'</span></div>';
+      overdue.slice(0,10).forEach(function(i){ html += AgendaPanel._row(i); });
+      if (overdue.length > 10)
+        html += '<div class="spm-meta" style="text-align:center;padding:4px 0;color:#aaa;font-size:11px;">+'+(overdue.length-10)+' more in the To Do panel</div>';
+      gap = true;
     }
 
-    // ── Upcoming assignments ──
-    if (upcoming.length > 0) {
-      html += '<div class="spm-section-head" style="margin-top:18px">Upcoming Assignments <span class="spm-count">' + upcoming.length + '</span></div>';
-      upcoming.slice(0, 10).forEach(function(item) {
-        html += AgendaPanel._itemHTML(item);
-      });
+    if (upcoming.length) {
+      html += '<div class="spm-h'+(gap?' spm-spacer':'')+'">Upcoming <span class="spm-badge">'+upcoming.length+'</span></div>';
+      upcoming.slice(0,12).forEach(function(i){ html += AgendaPanel._row(i); });
+      gap = true;
     }
 
-    // ── Feed events ──
-    if (events.length > 0) {
-      html += '<div class="spm-section-head" style="margin-top:18px">Events in Feed <span class="spm-count">' + events.length + '</span></div>';
-      events.forEach(function(item) {
-        html += AgendaPanel._itemHTML(item);
-      });
+    if (events.length) {
+      html += '<div class="spm-h'+(gap?' spm-spacer':'')+'">Events in Feed <span class="spm-badge">'+events.length+'</span></div>';
+      events.forEach(function(i){ html += AgendaPanel._row(i); });
     }
 
     if (!html) {
-      html = '<div class="spm-empty">Nothing found yet — make sure the feed and To Do sidebar have loaded.</div>';
+      html = '<div class="spm-empty">Nothing found yet.<br><small>Make sure the feed and To Do sidebar are loaded, then click Agenda again.</small></div>';
     }
 
     panel.innerHTML = html;
   },
 
-  _itemHTML: function(item) {
-    return [
-      '<div class="spm-item spm-' + item.type + '">',
-      '  <div class="spm-dot"></div>',
-      '  <div>',
-      '    <div class="spm-title">' + AgendaPanel._esc(item.title) + '</div>',
-      '    <div class="spm-meta">'  + AgendaPanel._esc(item.meta)  + '</div>',
-      '  </div>',
-      '</div>'
-    ].join('');
-  },
-
-  _esc: function(str) {
-    return String(str || '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  _row: function(item) {
+    var titleInner = item.href
+      ? '<a href="'+_esc(item.href)+'">'+_esc(item.title)+'</a>'
+      : _esc(item.title);
+    return '<div class="spm-row '+item.cls+'">'
+         + '<div class="spm-dot"></div>'
+         + '<div>'
+         + '<div class="spm-title">'+titleInner+'</div>'
+         + '<div class="spm-meta">'+_esc(item.meta)+'</div>'
+         + '</div></div>';
   }
 };
 
 /* ── PatchManager ────────────────────────────────────────────────────────── */
 
 var PatchManager = {
-  _patches: [],
-  _observer: null,
-  _debounce: null,
+  _patches:[], _observer:null, _debounce:null,
 
   run: function(patches) {
-    this._patches = patches || [];
+    this._patches = patches||[];
     this._applyAll();
     this._watch();
   },
 
   _applyAll: function() {
-    this._patches.forEach(function(patch) {
-      if (!Array.isArray(patch.rules)) return;
-      patch.rules.forEach(function(rule) {
-        RuleEngine.apply(rule);
-      });
+    this._patches.forEach(function(p){
+      if (!Array.isArray(p.rules)) return;
+      p.rules.forEach(function(r){ RuleEngine.apply(r); });
     });
   },
 
   _watch: function() {
     if (this._observer) return;
     var self = this;
-    this._observer = new MutationObserver(function() {
+    this._observer = new MutationObserver(function(){
       clearTimeout(self._debounce);
-      self._debounce = setTimeout(function() { self._applyAll(); }, 200);
+      self._debounce = setTimeout(function(){ self._applyAll(); }, 250);
     });
-    this._observer.observe(document.body, { childList: true, subtree: true });
+    this._observer.observe(document.body, {childList:true, subtree:true});
   }
 };

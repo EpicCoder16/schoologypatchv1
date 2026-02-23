@@ -7,10 +7,11 @@
  *   Page wrapper:     #wrapper > #container > #main-content-wrapper
  *   Feed:             .feed > .item-list > ul.s-edge-feed
  *   Each post:        li[id^="edge-assoc-"] > .s-edge-type-update-post > .edge-item
- *   Post attribution: .edge-main-wrapper > .edge-sentence
- *   Post body:        .update-body.s-rte
- *   Post footer:      .edge-footer
- *   To Do sidebar:    #right-column  (role="complementary")
+ *   Post avatar:      .edge-left img   ← do NOT hide these
+ *   Post attribution: .edge-sentence   (e.g. "Javaria Masroor → JRT 12th Grade")
+ *   Post body:        .update-body.s-rte  (text + embedded images)
+ *   Post footer:      .edge-footer     (Like · Comment · timestamp)
+ *   To Do sidebar:    #right-column
  *   Page footer:      #footer, #bottom-bar, #site-navigation-footer
  */
 
@@ -38,7 +39,7 @@ const PATCH_CATALOG = [
   {
     id: "focus-mode",
     name: "Focus Mode",
-    description: "Nukes everything except the nav bar — no feed, no To Do, no footer. Pure blank.",
+    description: "Removes feed, To Do sidebar, and footer — leaves only the nav bar.",
     rules: [
       { type: "hide", selector: "ul.s-edge-feed" },
       { type: "hide", selector: ".s-tabbed-navigation-tabs" },
@@ -53,10 +54,13 @@ const PATCH_CATALOG = [
   {
     id: "hide-post-images",
     name: "Hide Feed Images",
-    description: "Strips embedded images from posts — loads faster, less visual noise.",
+    description: "Strips embedded images from post bodies only — profile avatars are kept.",
     rules: [
+      // .update-body.s-rte is the post body text area only — does NOT include avatars
+      // Avatars live in .edge-left which is a sibling, not a child of .update-body
       { type: "hide", selector: ".update-body.s-rte img" },
-      { type: "hide", selector: ".update-body.s-rte p:empty" }
+      // Also hide the empty <p> spacers that images leave behind
+      { type: "css", selector: ".update-body.s-rte p:has(img)", styles: "display:none!important;" }
     ]
   },
 
@@ -85,9 +89,11 @@ const PATCH_CATALOG = [
   {
     id: "hide-post-actions",
     name: "Hide Post Action Buttons",
-    description: "Removes Like, Comment, and Share buttons and the ... menu from every post.",
+    description: "Removes Like, Comment, timestamp row and the ··· menu from every post.",
     rules: [
+      // .edge-footer: the bottom row of each post (timestamp · Like · Comment)
       { type: "hide", selector: ".edge-footer" },
+      // .edge-sentence-actions: the ··· overflow menu button on each post
       { type: "hide", selector: ".edge-sentence-actions" }
     ]
   },
@@ -95,10 +101,14 @@ const PATCH_CATALOG = [
   {
     id: "mute-post-metadata",
     name: "Mute Post Metadata",
-    description: "Dims the 'Posted to JRT 12th Grade' attribution line so post content stands out.",
+    description: "Strongly dims the 'Teacher → Group' attribution line on every post.",
     rules: [
-      { type: "css", selector: ".edge-sentence", styles: "opacity:0.4!important;font-size:11px!important;" },
-      { type: "css", selector: ".edge-left",     styles: "opacity:0.45!important;" }
+      // .edge-sentence wraps "Javaria Masroor → JRT 12th Grade"
+      { type: "css", selector: ".edge-sentence",       styles: "opacity:0.25!important;font-size:11px!important;line-height:1.2!important;" },
+      // .edge-left is the avatar column — dim it to match
+      { type: "css", selector: ".edge-left",           styles: "opacity:0.3!important;" },
+      // Also shrink the avatar so the post body gets more space
+      { type: "css", selector: ".edge-left img",       styles: "width:28px!important;height:28px!important;" }
     ]
   },
 
@@ -113,3 +123,88 @@ const PATCH_CATALOG = [
     ]
   }
 ];
+
+
+// ── NEW PATCHES: additive, highlight, move ────────────────────────────────
+
+PATCH_CATALOG.push(
+  {
+    id: "agenda-panel",
+    name: "📅 Agenda Panel",
+    description: "Adds a new 'Agenda' tab next to Recent Activity. Scrapes your To Do list and feed posts to build a unified event + assignment view.",
+    rules: [
+      { type: "agenda" }
+    ]
+  },
+
+  {
+    id: "highlight-overdue",
+    name: "Highlight Overdue Items",
+    description: "Draws a bold red accent on every overdue assignment row in the To Do sidebar.",
+    rules: [
+      {
+        type: "highlight",
+        selector: "#right-column .overdue-header ~ li, #right-column [class*='overdue'], #right-column li:has(.overdue)",
+        color: "#e53935",
+        bg: "rgba(229,57,53,0.06)"
+      }
+    ]
+  },
+
+  {
+    id: "highlight-upcoming",
+    name: "Highlight Upcoming Due Soon",
+    description: "Adds a blue accent to upcoming assignments due within the next few days.",
+    rules: [
+      {
+        type: "highlight",
+        selector: "#right-column .upcoming-item, #right-column li.upcoming",
+        color: "#1c458e",
+        bg: "rgba(28,69,142,0.05)"
+      }
+    ]
+  },
+
+  {
+    id: "move-todo-above-feed",
+    name: "Move To Do Above Feed",
+    description: "Relocates the To Do sidebar to sit above the activity feed instead of beside it, so assignments are always front and center.",
+    rules: [
+      {
+        type: "move",
+        selector: "#right-column",
+        target: "#content-wrapper",
+        position: "prepend"
+      },
+      {
+        type: "css",
+        selector: "#right-column",
+        styles: "width:100%;max-width:100%;margin-bottom:20px;float:none;"
+      },
+      {
+        type: "css",
+        selector: "#center-wrapper",
+        styles: "float:none;width:100%;"
+      }
+    ]
+  },
+
+  {
+    id: "inject-greeting",
+    name: "Personalized Header",
+    description: "Injects a friendly time-based greeting ('Good morning!') at the top of the content area.",
+    rules: [
+      {
+        type: "inject",
+        target: "#content-wrapper",
+        position: "afterbegin",
+        once: true,
+        html: (function() {
+          var h = new Date().getHours();
+          var greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+          return '<div style="font-size:22px;font-weight:700;color:#1c458e;padding:16px 0 8px;font-family:sans-serif;">' + greeting + ' \uD83D\uDC4B</div>';
+        })()
+      }
+    ]
+  }
+);

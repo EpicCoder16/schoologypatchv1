@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schoology Patch Marketplace</title>
+  <meta name="description" content="Select UI patches for Schoology and generate a bookmarklet that applies them instantly." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="container">
+      <div class="header-inner">
+        <div class="wordmark">
+          <span class="wordmark-tag">🩹 Community patches</span>
+          <h1>Patch Marketplace</h1>
+          <span class="wordmark-sub">for schoology.com · bookmarklet edition</span>
+        </div>
+        <span class="header-badge">v1.0 · no install required</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ─────────────────────────────────────────────────── -->
+  <main>
+    <div class="container">
+
+      <!-- Patch list -->
+      <div class="section-label">Available Patches</div>
+      <div id="patch-list">
+        <!-- Cards injected by app.js -->
+      </div>
+
+      <!-- Generate section -->
+      <section class="generate-section">
+        <div class="generate-header section-label">Generate Bookmarklet</div>
+        <p style="font-size:12.5px;color:#6a6a6a;margin-bottom:18px;line-height:1.7;">
+          Toggle the patches you want above, then click generate.
+          You'll get a link to drag onto your bookmarks bar.
+          Click it on any Schoology page to apply your patches instantly — no extension, no install.
+        </p>
+
+        <button id="generate-btn" type="button">Select patches above ↑</button>
+
+        <!-- Output: bookmarklet link appears here -->
+        <div id="output-area"></div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ── Footer ───────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-inner">
+        <span class="footer-text">Schoology Patch Marketplace · v1.0 · purely cosmetic</span>
+        <nav class="footer-links">
+          <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+          <a href="#" id="clear-link">Clear selections</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts: patches first (data), then engine, then generator, then app controller -->
+  <script src="patches.js"></script>
+  <script src="patchEngine.js"></script>
+  <script src="bookmarkletGenerator.js"></script>
+  <script src="app.js"></script>
+
+  <!-- Clear selections helper (inline, tiny) -->
+  <script>
+    document.getElementById('clear-link').addEventListener('click', function(e) {
+      e.preventDefault();
+      localStorage.removeItem('spm_enabled');
+      location.reload();
+    });
+  </script>
+
+</body>
+</html>

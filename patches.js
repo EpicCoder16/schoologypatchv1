@@ -1,75 +1,115 @@
 /**
  * patches.js
- * The patch catalog. This is the single source of truth for all available patches.
- * Add new patches here — the UI and bookmarklet generator will pick them up automatically.
+ * Patch catalog — selectors verified against real Schoology DOM (henrico.schoology.com).
+ *
+ * Confirmed structure from DevTools inspection:
+ *   Nav bar:          #header.site-navigation
+ *   Page wrapper:     #wrapper > #container > #main-content-wrapper
+ *   Feed:             .feed > .item-list > ul.s-edge-feed
+ *   Each post:        li[id^="edge-assoc-"] > .s-edge-type-update-post > .edge-item
+ *   Post attribution: .edge-main-wrapper > .edge-sentence
+ *   Post body:        .update-body.s-rte
+ *   Post footer:      .edge-footer
+ *   To Do sidebar:    #right-column  (role="complementary")
+ *   Page footer:      #footer, #bottom-bar, #site-navigation-footer
  */
 
 const PATCH_CATALOG = [
   {
-    id: "minimal-dashboard",
-    name: "Minimal Dashboard",
-    description: "Hides announcement panels and sidebar widgets so you only see your course feed.",
-    rules: [
-      { type: "hide", selector: ".s-edge-feed-item-container .announcement-view" },
-      { type: "hide", selector: "#right-column-inner .widget-container" },
-      { type: "css",  selector: "#center-column", styles: "max-width:860px;margin:0 auto;" }
-    ]
-  },
-  {
-    id: "dark-sidebar",
-    name: "Dark Sidebar",
-    description: "Applies a dark background to the left navigation sidebar for a focused look.",
-    rules: [
-      { type: "css", selector: "#left-column-inner",     styles: "background:#1a1a2e;border-radius:8px;padding:8px;" },
-      { type: "css", selector: "#left-column-inner a",   styles: "color:#e0e0e0!important;" }
-    ]
-  },
-  {
-    id: "focus-grades",
-    name: "Focus: Grades Only",
-    description: "On the grades page, hides teacher comments and period labels for a clean summary.",
-    rules: [
-      { type: "hide", selector: ".comment-body" },
-      { type: "hide", selector: ".period-title" },
-      { type: "css",  selector: ".gradebook-course-grades tr", styles: "line-height:2;" }
-    ]
-  },
-  {
-    id: "compact-nav",
-    name: "Compact Navigation",
-    description: "Shrinks the top navigation bar height to reclaim vertical screen space.",
-    rules: [
-      { type: "css",  selector: "#top-bar",       styles: "height:44px!important;min-height:44px!important;" },
-      { type: "css",  selector: "#top-bar .logo", styles: "height:32px;" },
-      { type: "hide", selector: "#school-switcher" }
-    ]
-  },
-  {
-    id: "high-contrast-assignments",
-    name: "High Contrast Assignments",
-    description: "Overdue assignments get a red left border; upcoming get green — instantly scannable.",
-    rules: [
-      { type: "css", selector: ".overdue-assignment,.assignment-row.overdue",   styles: "border-left:4px solid #e53935!important;padding-left:8px;" },
-      { type: "css", selector: ".upcoming-assignment,.assignment-row.upcoming", styles: "border-left:4px solid #43a047!important;padding-left:8px;" }
-    ]
-  },
-  {
     id: "hide-social-feed",
     name: "Hide Social Feed",
-    description: "Removes the social/updates feed from the dashboard entirely.",
+    description: "Hides the entire Recent Activity post feed. The To Do sidebar stays visible.",
     rules: [
-      { type: "hide", selector: ".s-edge-feed" },
-      { type: "hide", selector: ".home-feed-wrapper .create-post" },
-      { type: "css",  selector: "#content-wrapper", styles: "max-width:100%;" }
+      { type: "hide", selector: "ul.s-edge-feed" },
+      { type: "hide", selector: ".s-tabbed-navigation-tabs" },
+      { type: "hide", selector: ".nav-tabs" }
     ]
   },
+
   {
-    id: "readable-content",
-    name: "Readable Content",
-    description: "Increases font size and line height in course content areas for easier reading.",
+    id: "hide-todo-sidebar",
+    name: "Hide To Do Sidebar",
+    description: "Removes the To Do / overdue panel on the right so only the feed is visible.",
     rules: [
-      { type: "css", selector: ".material-content,.s-user-generated-content", styles: "font-size:15px!important;line-height:1.75!important;" },
-      { type: "css", selector: ".course-period-title", styles: "font-size:18px!important;font-weight:600!important;" }
+      { type: "hide", selector: "#right-column" }
+    ]
+  },
+
+  {
+    id: "focus-mode",
+    name: "Focus Mode",
+    description: "Nukes everything except the nav bar — no feed, no To Do, no footer. Pure blank.",
+    rules: [
+      { type: "hide", selector: "ul.s-edge-feed" },
+      { type: "hide", selector: ".s-tabbed-navigation-tabs" },
+      { type: "hide", selector: ".nav-tabs" },
+      { type: "hide", selector: "#right-column" },
+      { type: "hide", selector: "#footer" },
+      { type: "hide", selector: "#bottom-bar" },
+      { type: "hide", selector: "#site-navigation-footer" }
+    ]
+  },
+
+  {
+    id: "hide-post-images",
+    name: "Hide Feed Images",
+    description: "Strips embedded images from posts — loads faster, less visual noise.",
+    rules: [
+      { type: "hide", selector: ".update-body.s-rte img" },
+      { type: "hide", selector: ".update-body.s-rte p:empty" }
+    ]
+  },
+
+  {
+    id: "compact-posts",
+    name: "Compact Feed",
+    description: "Tightens padding on post cards so more content fits on screen.",
+    rules: [
+      { type: "css", selector: ".edge-item",         styles: "padding:8px 10px!important;" },
+      { type: "css", selector: ".edge-footer",       styles: "padding:4px 10px!important;" },
+      { type: "css", selector: ".edge-main-wrapper", styles: "padding:6px 0!important;" }
+    ]
+  },
+
+  {
+    id: "compact-nav",
+    name: "Compact Navigation Bar",
+    description: "Shrinks the top navigation bar height to reclaim vertical space.",
+    rules: [
+      { type: "css", selector: "#header",            styles: "min-height:48px!important;" },
+      { type: "css", selector: "#header .logo-main", styles: "height:30px!important;" },
+      { type: "css", selector: "#wrapper",           styles: "padding-top:0!important;" }
+    ]
+  },
+
+  {
+    id: "hide-post-actions",
+    name: "Hide Post Action Buttons",
+    description: "Removes Like, Comment, and Share buttons and the ... menu from every post.",
+    rules: [
+      { type: "hide", selector: ".edge-footer" },
+      { type: "hide", selector: ".edge-sentence-actions" }
+    ]
+  },
+
+  {
+    id: "mute-post-metadata",
+    name: "Mute Post Metadata",
+    description: "Dims the 'Posted to JRT 12th Grade' attribution line so post content stands out.",
+    rules: [
+      { type: "css", selector: ".edge-sentence", styles: "opacity:0.4!important;font-size:11px!important;" },
+      { type: "css", selector: ".edge-left",     styles: "opacity:0.45!important;" }
+    ]
+  },
+
+  {
+    id: "hide-footer",
+    name: "Hide Page Footer",
+    description: "Removes the Schoology footer and bottom bar for a cleaner page.",
+    rules: [
+      { type: "hide", selector: "#footer" },
+      { type: "hide", selector: "#bottom-bar" },
+      { type: "hide", selector: "#site-navigation-footer" }
     ]
   }
 ];

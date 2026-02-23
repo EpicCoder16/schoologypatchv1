@@ -128,8 +128,7 @@ var AgendaPanel = {
     this._injectStyles();
     this._buildUI();
     var self = this;
-    // Wait 500ms for Schoology's JS to finish rendering the sidebar
-    setTimeout(function(){ self._refreshData(); }, 500);
+    setTimeout(function(){ self._refreshData(); }, 600);
     return true;
   },
 
@@ -138,152 +137,213 @@ var AgendaPanel = {
     var s = document.createElement('style');
     s.id = 'spm-styles';
     s.textContent = [
-      /* Tab button — sits inline in Schoology's own tab strip */
-      '#spm-tab{display:inline-flex;align-items:center;padding:10px 16px;',
-      'font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;',
-      'color:#888;border-bottom:3px solid transparent;cursor:pointer;user-select:none;',
-      'vertical-align:bottom;transition:color .15s,border-color .15s;}',
-      '#spm-tab:hover{color:#1c458e;}',
-      '#spm-tab.on{color:#1c458e;border-bottom-color:#1c458e;}',
+      /* ── Tab li injected into ol.sgy-tabbed-navigation ── */
+      '#spm-tab-li{list-style:none;}',
+      '#spm-tab-li a{',
+        'display:inline-block;padding:10px 16px;',
+        'font-size:13px;font-weight:600;letter-spacing:.03em;',
+        'color:#888;text-decoration:none;cursor:pointer;',
+        'border-bottom:3px solid transparent;',
+        'transition:color .15s,border-color .15s;',
+        'white-space:nowrap;',
+      '}',
+      '#spm-tab-li a:hover{color:#1c458e;}',
+      '#spm-tab-li.spm-on a{color:#1c458e;border-bottom-color:#1c458e;}',
 
-      /* Panel */
-      '#spm-panel{display:none;padding:18px 0;animation:spmIn .2s ease;}',
-      '#spm-panel.on{display:block;}',
-      '@keyframes spmIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}',
+      /* ── Floating draggable panel ── */
+      '#spm-panel{',
+        'position:fixed;top:70px;right:20px;z-index:99999;',
+        'width:360px;max-height:calc(100vh - 100px);',
+        'background:#fff;border-radius:10px;',
+        'box-shadow:0 8px 32px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.1);',
+        'display:none;flex-direction:column;overflow:hidden;',
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+      '}',
+      '#spm-panel.on{display:flex;}',
+      '@keyframes spmIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}',
+      '#spm-panel.on{animation:spmIn .2s ease;}',
 
-      /* Section headers */
-      '.spm-h{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;',
-      'color:#999;padding:0 0 7px;border-bottom:1px solid #e5e5e5;margin:0 0 10px;}',
-      '.spm-h+.spm-h,.spm-spacer{margin-top:22px;}',
+      /* ── Panel header / drag handle ── */
+      '#spm-panel-head{',
+        'display:flex;align-items:center;justify-content:space-between;',
+        'padding:12px 14px 11px;',
+        'background:#1c458e;color:#fff;',
+        'cursor:grab;user-select:none;border-radius:10px 10px 0 0;',
+        'flex-shrink:0;',
+      '}',
+      '#spm-panel-head:active{cursor:grabbing;}',
+      '#spm-panel-title{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}',
+      '#spm-panel-close{',
+        'background:rgba(255,255,255,.2);border:none;color:#fff;',
+        'width:22px;height:22px;border-radius:50%;cursor:pointer;',
+        'font-size:14px;line-height:22px;text-align:center;',
+        'transition:background .15s;padding:0;',
+      '}',
+      '#spm-panel-close:hover{background:rgba(255,255,255,.35);}',
 
-      /* Item rows */
-      '.spm-row{display:flex;align-items:flex-start;gap:10px;',
-      'padding:10px 12px;margin-bottom:6px;border-radius:6px;',
-      'border-left:3px solid #ddd;background:#f8f8f8;}',
+      /* ── Scrollable body ── */
+      '#spm-panel-body{overflow-y:auto;padding:14px 14px 18px;flex:1;}',
+      '#spm-panel-body::-webkit-scrollbar{width:4px;}',
+      '#spm-panel-body::-webkit-scrollbar-thumb{background:#ddd;border-radius:2px;}',
+
+      /* ── Section headers ── */
+      '.spm-h{',
+        'font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;',
+        'color:#aaa;padding:0 0 6px;border-bottom:1px solid #eee;margin:0 0 8px;',
+      '}',
+      '.spm-gap{margin-top:18px;}',
+
+      /* ── Rows ── */
+      '.spm-row{',
+        'display:flex;align-items:flex-start;gap:9px;',
+        'padding:9px 10px;margin-bottom:5px;border-radius:6px;',
+        'border-left:3px solid #ddd;background:#f8f8f8;',
+      '}',
       '.spm-row.ov{border-left-color:#e53935;background:#fff8f8;}',
       '.spm-row.up{border-left-color:#1c458e;background:#f5f8ff;}',
       '.spm-row.ev{border-left-color:#f5a623;background:#fffbf2;}',
-
-      /* Dot */
-      '.spm-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px;}',
+      '.spm-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;}',
       '.spm-row.ov .spm-dot{background:#e53935;}',
       '.spm-row.up .spm-dot{background:#1c458e;}',
       '.spm-row.ev .spm-dot{background:#f5a623;}',
-
-      /* Text */
-      '.spm-title{font-size:13px;font-weight:600;color:#222;line-height:1.4;}',
+      '.spm-title{font-size:12.5px;font-weight:600;color:#222;line-height:1.4;}',
       '.spm-title a{color:inherit;text-decoration:none;}',
       '.spm-title a:hover{text-decoration:underline;}',
-      '.spm-meta{font-size:11px;color:#888;margin-top:2px;line-height:1.4;}',
-
-      /* Badge */
-      '.spm-badge{display:inline-block;font-size:9px;font-weight:700;',
-      'background:#1c458e;color:#fff;border-radius:8px;padding:1px 5px;margin-left:5px;vertical-align:middle;}',
-
-      /* Empty state */
-      '.spm-empty{font-size:13px;color:#aaa;text-align:center;padding:40px 0;}',
+      '.spm-meta{font-size:11px;color:#999;margin-top:2px;line-height:1.35;}',
+      '.spm-badge{',
+        'display:inline-block;font-size:9px;font-weight:700;',
+        'background:#1c458e;color:#fff;border-radius:8px;',
+        'padding:1px 5px;margin-left:4px;vertical-align:middle;',
+      '}',
+      '.spm-empty{font-size:12px;color:#bbb;text-align:center;padding:32px 0;}',
     ].join('');
     document.head.appendChild(s);
   },
 
   _buildUI: function() {
-    if (document.getElementById('spm-tab')) return;
+    if (document.getElementById('spm-panel')) return;
 
-    /* -- Tab button -- */
-    var btn = document.createElement('span');
-    btn.id = 'spm-tab';
-    btn.textContent = 'Agenda';
-    var self = this;
-    btn.addEventListener('click', function(){ self._toggle(); });
-
-    /*
-     * Find Schoology's tab strip.
-     * The "Recent Activity / Course Dashboard" tabs live inside
-     * .s-tabbed-navigation which is inside #center-top.
-     * We try progressively broader selectors.
-     */
-    var strip = _one('.s-tabbed-navigation')
-             || _one('#center-top ul')
-             || _one('#center-top');
-
-    if (strip) {
-      strip.appendChild(btn);
+    /* ── Tab in Schoology's ol.sgy-tabbed-navigation ── */
+    var ol = document.querySelector('ol.sgy-tabbed-navigation');
+    if (ol) {
+      var li = document.createElement('li');
+      li.id = 'spm-tab-li';
+      var a = document.createElement('a');
+      a.textContent = 'Agenda';
+      a.href = '#';
+      var self = this;
+      a.addEventListener('click', function(e){ e.preventDefault(); self._toggle(); });
+      li.appendChild(a);
+      ol.appendChild(li);
     } else {
-      // Absolute fallback: float above the feed
-      var anchor = _one('#content-wrapper') || _one('#main-inner');
-      if (anchor) anchor.insertAdjacentElement('afterbegin', btn);
+      /* Fallback: floating trigger button if tab strip not found */
+      var trigger = document.createElement('button');
+      trigger.id = 'spm-trigger';
+      trigger.textContent = '📅';
+      trigger.title = 'Open Agenda';
+      trigger.style.cssText = 'position:fixed;top:68px;right:20px;z-index:99999;width:36px;height:36px;border-radius:50%;background:#1c458e;color:#fff;border:none;font-size:16px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);';
+      var self = this;
+      trigger.addEventListener('click', function(){ self._toggle(); });
+      document.body.appendChild(trigger);
     }
 
-    /* -- Panel -- */
+    /* ── Floating panel ── */
     var panel = document.createElement('div');
     panel.id = 'spm-panel';
 
-    // Insert panel as sibling after the feed div
-    var feedDiv = _one('.feed') || _one('#main-inner');
-    if (feedDiv) {
-      feedDiv.parentNode.insertBefore(panel, feedDiv.nextSibling);
-    } else {
-      var cw = _one('#content-wrapper') || _one('#center-wrapper');
-      if (cw) cw.appendChild(panel);
-    }
+    /* Header / drag handle */
+    var head = document.createElement('div');
+    head.id = 'spm-panel-head';
+    head.innerHTML = '<span id="spm-panel-title">📅 Agenda</span><button id="spm-panel-close" title="Close">✕</button>';
+    panel.appendChild(head);
+
+    /* Scrollable body */
+    var body = document.createElement('div');
+    body.id = 'spm-panel-body';
+    body.innerHTML = '<div class="spm-empty">Loading…</div>';
+    panel.appendChild(body);
+
+    document.body.appendChild(panel);
+
+    /* Close button */
+    var self = this;
+    head.querySelector('#spm-panel-close').addEventListener('click', function(){ self._toggle(); });
+
+    /* Drag to move */
+    this._makeDraggable(panel, head);
   },
 
-  _toggle: function() {
-    var btn    = document.getElementById('spm-tab');
-    var panel  = document.getElementById('spm-panel');
-    var feed   = _one('.feed');
-    var isOn   = panel && panel.classList.contains('on');
+  /* ── Drag logic ─────────────────────────────────────────────── */
+  _makeDraggable: function(panel, handle) {
+    var startX, startY, startLeft, startTop;
 
+    handle.addEventListener('mousedown', function(e) {
+      if (e.target.id === 'spm-panel-close') return;
+      startX = e.clientX;
+      startY = e.clientY;
+      var rect = panel.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop  = rect.top;
+      panel.style.right = 'auto'; // switch from right-anchored to left-anchored
+
+      function onMove(e) {
+        var dx = e.clientX - startX;
+        var dy = e.clientY - startY;
+        panel.style.left = Math.max(0, startLeft + dx) + 'px';
+        panel.style.top  = Math.max(0, startTop  + dy) + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      e.preventDefault();
+    });
+  },
+
+  /* ── Toggle panel open/closed ───────────────────────────────── */
+  _toggle: function() {
+    var panel  = document.getElementById('spm-panel');
+    var tabLi  = document.getElementById('spm-tab-li');
+    if (!panel) return;
+    var isOn = panel.classList.contains('on');
     if (isOn) {
       panel.classList.remove('on');
-      btn.classList.remove('on');
-      if (feed) feed.style.display = '';
+      if (tabLi) tabLi.classList.remove('spm-on');
     } else {
       panel.classList.add('on');
-      btn.classList.add('on');
-      if (feed) feed.style.display = 'none';
+      if (tabLi) tabLi.classList.add('spm-on');
       this._refreshData();
     }
   },
 
+  /* ── Scrape + render ────────────────────────────────────────── */
   _refreshData: function() {
     var panel = document.getElementById('spm-panel');
     if (!panel || !panel.classList.contains('on')) return;
     var overdue  = this._scrapeOverdue();
     var upcoming = this._scrapeUpcoming();
     var events   = this._scrapeEvents();
-    this._render(panel, overdue, upcoming, events);
+    var body = document.getElementById('spm-panel-body');
+    if (body) this._render(body, overdue, upcoming, events);
   },
 
-  /* ── SCRAPE OVERDUE ─────────────────────────────────────────────
-   * Confirmed: overdue items are div.upcoming-event.upcoming-event-block
-   * that appear BEFORE the h4.submissions-title "UPCOMING" header.
-   * The assignment link is at: span.event-title > a
-   * The course is in the aria-label of the parent span.infotip:
-   *   aria-label="COURSE : section School"
-   * Days overdue text is in the sibling span inside span.event-title.
+  /*
+   * OVERDUE — confirmed selectors from DevTools:
+   *   div.upcoming-event.upcoming-event-block  (each assignment card)
+   *     span.event-title > a                   (assignment link)
+   *     span.infotip[aria-label]               (course in aria-label)
+   * Overdue cards appear BEFORE h4.submissions-title in DOM order.
    */
   _scrapeOverdue: function() {
     var items = [];
     var seen  = {};
+    var upHeader = document.querySelector('h4.submissions-title');
 
-    // Find where UPCOMING starts so we don't bleed into it
-    var upcomingHeader = _one('h4.submissions-title');
-    
-    _query('.upcoming-list .upcoming-event').forEach(function(block) {
-      // Skip if this block comes after the UPCOMING header
-      if (upcomingHeader && upcomingHeader.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING) {
-        // block is AFTER upcomingHeader — skip (it's upcoming, not overdue)
-        // Note: compareDocumentPosition returns FOLLOWING if block follows header
-        // We want to skip blocks that appear AFTER the header
-        return;
-      }
-      // Actually flip the logic: upcomingHeader PRECEDES block means block is upcoming
-      if (upcomingHeader &&
-          (upcomingHeader.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_PRECEDING) === 0 &&
-          upcomingHeader !== block) {
-        // header does NOT precede block, meaning block is before header = overdue ✓
-      }
+    document.querySelectorAll('.upcoming-event').forEach(function(block) {
+      // Skip blocks that come after the UPCOMING header
+      if (upHeader && (upHeader.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
 
       var link = block.querySelector('span.event-title > a');
       if (!link) return;
@@ -291,79 +351,49 @@ var AgendaPanel = {
       if (!title || seen[title]) return;
       seen[title] = true;
 
-      // Course from aria-label: "COURSE : section School"
       var tooltip = block.querySelector('span.infotip[aria-label]');
-      var course  = '';
-      if (tooltip) {
-        var lbl = tooltip.getAttribute('aria-label') || '';
-        course  = lbl.split(':')[0].trim();
-      }
+      var course  = tooltip ? (tooltip.getAttribute('aria-label')||'').split(':')[0].trim() : '';
+      var daysEl  = block.querySelector('span.event-title span');
+      var days    = daysEl ? daysEl.textContent.trim() : '';
+      var meta    = [course, days].filter(Boolean).join(' · ');
 
-      // Days overdue — the span sibling next to the <a> inside event-title
-      var eventTitleSpan = block.querySelector('span.event-title');
-      var daysSpan = eventTitleSpan ? eventTitleSpan.querySelector('span') : null;
-      var days = daysSpan ? daysSpan.textContent.trim() : '';
-
-      var meta = [course, days].filter(Boolean).join(' · ');
       items.push({ title: title, href: link.getAttribute('href'), meta: meta, cls: 'ov' });
     });
-
     return items;
   },
 
-  /* ── SCRAPE UPCOMING ────────────────────────────────────────────
-   * Same div.upcoming-event structure but they appear after
-   * h4.submissions-title "UPCOMING".
-   * date-header divs have id="upcoming_submissions" between groups.
+  /*
+   * UPCOMING — same card structure, appear AFTER h4.submissions-title.
+   * Date text is in preceding div[id="upcoming_submissions"].date-header siblings.
    */
   _scrapeUpcoming: function() {
-    var items = [];
-    var seen  = {};
+    var items   = [];
+    var seen    = {};
+    var upHeader = document.querySelector('h4.submissions-title');
+    if (!upHeader) return items;
 
-    var upcomingHeader = _one('h4.submissions-title');
-    if (!upcomingHeader) return items;
-
-    // Get the upcoming-list that contains the header
-    var upcomingList = upcomingHeader.closest('.upcoming-list')
-                    || upcomingHeader.parentNode;
-
-    // Walk all upcoming-event blocks inside the upcoming section
-    // Since overdue and upcoming share the same .upcoming-list, we need
-    // to only grab blocks that appear AFTER the h4
-    var allBlocks = _query('.upcoming-list .upcoming-event');
-    var passedHeader = false;
-
-    allBlocks.forEach(function(block) {
-      if (!passedHeader) {
-        // Check if we've passed the UPCOMING header in DOM order
-        // by seeing if the header precedes this block
-        if (upcomingHeader.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING) {
-          passedHeader = true;
-        } else {
-          return; // still before UPCOMING header
-        }
+    var passed = false;
+    document.querySelectorAll('.upcoming-list > *').forEach(function(el) {
+      if (!passed) {
+        if (el === upHeader || el.contains(upHeader)) { passed = true; }
+        return;
       }
+      if (!el.classList.contains('upcoming-event')) return;
 
-      var link = block.querySelector('span.event-title > a');
+      var link = el.querySelector('span.event-title > a');
       if (!link) return;
       var title = link.textContent.trim();
       if (!title || seen[title]) return;
       seen[title] = true;
 
-      var tooltip = block.querySelector('span.infotip[aria-label]');
-      var course  = '';
-      if (tooltip) {
-        var lbl = tooltip.getAttribute('aria-label') || '';
-        course  = lbl.split(':')[0].trim();
-      }
+      var tooltip = el.querySelector('span.infotip[aria-label]');
+      var course  = tooltip ? (tooltip.getAttribute('aria-label')||'').split(':')[0].trim() : '';
 
-      // Due date: look for a date-header preceding this block
-      // The date-header div with id="upcoming_submissions" holds the date text
-      // Walk backwards to find the most recent date header
+      // Walk back to find nearest date-header sibling
       var dateText = '';
-      var prev = block.previousElementSibling;
+      var prev = el.previousElementSibling;
       while (prev) {
-        if (prev.id === 'upcoming_submissions' || prev.classList.contains('date-header')) {
+        if (prev.classList && prev.classList.contains('date-header')) {
           dateText = prev.textContent.trim();
           break;
         }
@@ -373,72 +403,55 @@ var AgendaPanel = {
       var meta = [dateText, course].filter(Boolean).join(' · ');
       items.push({ title: title, href: link.getAttribute('href'), meta: meta, cls: 'up' });
     });
-
     return items;
   },
 
-  /* ── SCRAPE FEED EVENTS ─────────────────────────────────────────
-   * Walk feed posts, detect event-like keywords in body text.
-   */
+  /* FEED EVENTS — scan post bodies for event-like text */
   _scrapeEvents: function() {
     var events  = [];
     var pattern = /\b(\d{1,2}[\/\-]\d{1,2}|\d{1,2}:\d{2}\s*[ap]m|january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|meeting|event|bingo|game|practice|concert|club|deadline|test|quiz|exam|room\s*\d|auditorium|cafeteria|gym|library)\b/i;
 
-    _query('li[id^="edge-assoc-"]').forEach(function(li) {
+    document.querySelectorAll('li[id^="edge-assoc-"]').forEach(function(li) {
       var bodyEl = li.querySelector('.update-body.s-rte');
       if (!bodyEl) return;
-      var text = (bodyEl.innerText || bodyEl.textContent || '').replace(/\s+/g,' ').trim();
+      var text = (bodyEl.innerText||'').replace(/\s+/g,' ').trim();
       if (!text || text.length < 10 || !pattern.test(text)) return;
-
       var nameEl = li.querySelector('.long-username, .edge-sentence a');
       var name   = nameEl ? nameEl.textContent.trim() : 'Feed';
-      var title  = text.length > 140 ? text.substring(0,137)+'…' : text;
-
-      events.push({ title: title, href: null, meta: 'From: '+name, cls: 'ev' });
+      events.push({ title: text.length > 130 ? text.slice(0,127)+'…' : text, href: null, meta: 'From: '+name, cls: 'ev' });
     });
-
     return events;
   },
 
-  /* ── RENDER ─────────────────────────────────────────────────────── */
-  _render: function(panel, overdue, upcoming, events) {
+  _render: function(body, overdue, upcoming, events) {
     var html = '';
     var gap  = false;
 
     if (overdue.length) {
       html += '<div class="spm-h">Overdue <span class="spm-badge">'+overdue.length+'</span></div>';
       overdue.slice(0,10).forEach(function(i){ html += AgendaPanel._row(i); });
-      if (overdue.length > 10)
-        html += '<div class="spm-meta" style="text-align:center;padding:4px 0;color:#aaa;font-size:11px;">+'+(overdue.length-10)+' more in the To Do panel</div>';
+      if (overdue.length > 10) html += '<div class="spm-meta" style="text-align:center;color:#bbb;font-size:11px;padding:4px 0">+'+(overdue.length-10)+' more in sidebar</div>';
       gap = true;
     }
-
     if (upcoming.length) {
-      html += '<div class="spm-h'+(gap?' spm-spacer':'')+'">Upcoming <span class="spm-badge">'+upcoming.length+'</span></div>';
+      html += '<div class="spm-h'+(gap?' spm-gap':'')+'">Upcoming <span class="spm-badge">'+upcoming.length+'</span></div>';
       upcoming.slice(0,12).forEach(function(i){ html += AgendaPanel._row(i); });
       gap = true;
     }
-
     if (events.length) {
-      html += '<div class="spm-h'+(gap?' spm-spacer':'')+'">Events in Feed <span class="spm-badge">'+events.length+'</span></div>';
+      html += '<div class="spm-h'+(gap?' spm-gap':'')+'">Events in Feed <span class="spm-badge">'+events.length+'</span></div>';
       events.forEach(function(i){ html += AgendaPanel._row(i); });
     }
-
-    if (!html) {
-      html = '<div class="spm-empty">Nothing found yet.<br><small>Make sure the feed and To Do sidebar are loaded, then click Agenda again.</small></div>';
-    }
-
-    panel.innerHTML = html;
+    if (!html) html = '<div class="spm-empty">Nothing found yet.<br><small>Make sure the page is fully loaded, then click Agenda again.</small></div>';
+    body.innerHTML = html;
   },
 
   _row: function(item) {
-    var titleInner = item.href
+    var inner = item.href
       ? '<a href="'+_esc(item.href)+'">'+_esc(item.title)+'</a>'
       : _esc(item.title);
-    return '<div class="spm-row '+item.cls+'">'
-         + '<div class="spm-dot"></div>'
-         + '<div>'
-         + '<div class="spm-title">'+titleInner+'</div>'
+    return '<div class="spm-row '+item.cls+'"><div class="spm-dot"></div><div>'
+         + '<div class="spm-title">'+inner+'</div>'
          + '<div class="spm-meta">'+_esc(item.meta)+'</div>'
          + '</div></div>';
   }
